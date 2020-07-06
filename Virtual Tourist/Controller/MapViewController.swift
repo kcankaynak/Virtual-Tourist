@@ -76,7 +76,6 @@ extension MapViewController {
     
     fileprivate func setupRecognizer() {
         let recognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
-        recognizer.minimumPressDuration = 0.5
         mapView.addGestureRecognizer(recognizer)
     }
 }
