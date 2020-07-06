@@ -16,6 +16,8 @@ class MapViewController: UIViewController {
 
     @IBOutlet weak var mapView: MKMapView!
     var fetchedResultsController: NSFetchedResultsController<Pin>!
+    var selectedAnnotation: MKPointAnnotation?
+    var selectedPin: Pin?
     
     fileprivate let imageRect = CGRect(x: 0, y: 0, width: UIScreen.main.bounds.size.width, height: 140)
     fileprivate var snapshotImage: UIImage?
@@ -91,6 +93,7 @@ extension MapViewController: MKMapViewDelegate {
             pinView = MKPinAnnotationView(annotation: annotation, reuseIdentifier: AppIdentifiers.Reuse.pin)
             pinView!.animatesDrop = true
             pinView!.canShowCallout = true
+            pinView!.isDraggable = true
         } else {
             pinView!.annotation = annotation
         }
@@ -115,21 +118,41 @@ extension MapViewController: MKMapViewDelegate {
 extension MapViewController {
     
     @objc func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
-        if recognizer.state == .began {
+        switch recognizer.state {
+        case .began:
             let location = recognizer.location(in: mapView)
             let coordinate = mapView.convert(location, toCoordinateFrom: mapView)
 
             let annotation = MKPointAnnotation()
             annotation.coordinate = coordinate
             mapView.addAnnotation(annotation)
+            selectedAnnotation = annotation
             mapView.setCenter(mapView.centerCoordinate, animated: true)
 
             let pin = Pin(context: CoreDataController.shared.viewContext)
             pin.latitude = coordinate.latitude
             pin.longitude = coordinate.longitude
+            selectedPin = pin
 
             CoreDataController.shared.save()
             try? fetchedResultsController.performFetch()
+        case .changed:
+            let location = recognizer.location(in: mapView)
+            let coordinate = mapView.convert(location, toCoordinateFrom: mapView)
+            if selectedAnnotation != nil {
+                selectedAnnotation!.coordinate = coordinate
+            }
+            if selectedPin != nil {
+                selectedPin!.latitude = coordinate.latitude
+                selectedPin!.longitude = coordinate.longitude
+            }
+        case .ended:
+            CoreDataController.shared.save()
+            try? fetchedResultsController.performFetch()
+            selectedPin = nil
+            selectedAnnotation = nil
+        default:
+            break
         }
     }
 }
