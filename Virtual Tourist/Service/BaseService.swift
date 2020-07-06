@@ -14,6 +14,7 @@ final class BaseService {
     
     private static let apiKey = "372ea388feb412015551567f06d45eae"
     private static let decoder = JSONDecoder()
+    private static var page = 1
     
     enum Endpoints {
         static let baseURL = "https://www.flickr.com/services/rest/?method="
@@ -24,7 +25,7 @@ final class BaseService {
             switch self {
             case let .searchPhotos(latitude, longitude):
                 return Endpoints.baseURL + "flickr.photos.search&" + "api_key=\(apiKey)&" + "sort=date-posted-asc&" +
-                    "&privacy_filter=1" + "media=photos&" + "lat=\(latitude)&lon=\(longitude)&" + "extras=url_m&" + "per_page=21&" + "page=\(Int.random(in: 1...25))&" + "format=json&nojsoncallback=1"
+                    "&privacy_filter=1" + "media=photos&" + "lat=\(latitude)&lon=\(longitude)&" + "extras=url_m&" + "per_page=21&" + "page=\(Int.random(in: 1...BaseService.page))&" + "format=json&nojsoncallback=1"
             }
         }
         var url: URL {
@@ -47,6 +48,7 @@ extension BaseService {
             }
             do {
                 let responseObject = try BaseService.decoder.decode(PhotoResponse.self, from: data)
+                BaseService.page = responseObject.photos.pages
                 DispatchQueue.main.async {
                     completionHandler(responseObject, nil)
                 }

@@ -63,7 +63,7 @@ extension CoreDataController {
         do {
             try viewContext.save()
         } catch let error {
-            print("Can't save item due to error -> \(error.localizedDescription)")
+            debugPrint("Can't save item due to error -> \(error.localizedDescription)")
         }
     }
 }
