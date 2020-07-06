@@ -17,8 +17,15 @@ class AlbumViewController: UIViewController {
     var selectedPin: Pin!
     var headerImage: UIImage!
     var fetchedResultsController: NSFetchedResultsController<Photo>!
+    var isRemoveAllData = false
     
     private let dispatchGroup = DispatchGroup()
+    fileprivate lazy var  activityIndicator: UIActivityIndicatorView = {
+        let indicator = UIActivityIndicatorView(frame: CGRect(x: 0, y: 0, width: 20, height: 20))
+        indicator.color = .lightGray
+        indicator.hidesWhenStopped = true
+        return indicator
+    }()
     
     let space: CGFloat = 2.0
     lazy var collectionSize: CGSize = {
@@ -30,6 +37,7 @@ class AlbumViewController: UIViewController {
         navigationItem.title = "Photos"
         setupFetchedResultsController()
         fetchPhotos()
+        setupNavigationBar()
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -40,6 +48,11 @@ class AlbumViewController: UIViewController {
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         navigationController?.setNavigationBarHidden(true, animated: true)
+    }
+    
+    private func setupNavigationBar() {
+        let barButton = UIBarButtonItem(customView: activityIndicator)
+        navigationItem.setRightBarButton(barButton, animated: true)
     }
     
     deinit {
@@ -69,6 +82,9 @@ extension AlbumViewController {
     
     fileprivate func fetchPhotos() {
         if fetchedResultsController.fetchedObjects == nil || fetchedResultsController.fetchedObjects!.isEmpty {
+            DispatchQueue.main.async {
+                self.activityIndicator.startAnimating()
+            }
             newCollectionButton.isEnabled = false
             BaseService.shared.searchPhotos(lat: selectedPin.latitude, lon: selectedPin.longitude) { (response, error) in
                 if let response = response {
@@ -81,25 +97,39 @@ extension AlbumViewController {
     }
     
     fileprivate func downloadPhotos(_ model: PhotoModel) {
+        DispatchQueue.main.async {
+            self.activityIndicator.startAnimating()
+        }
         for photo in model.photo {
             dispatchGroup.enter()
+            let photoObject = Photo(context: CoreDataController.shared.viewContext)
+            photoObject.pin = selectedPin
             if let photoURL = URL(string: photo.imageURL) {
                 BaseService.shared.downloadImage(imageURL: photoURL) { (data, error) in
                     if let data = data {
-                        let photo = Photo(context: CoreDataController.shared.viewContext)
-                        photo.image = data
-                        photo.pin = self.selectedPin
+                        photoObject.image = data
                         CoreDataController.shared.save()
                     }
                     self.dispatchGroup.leave()
                 }
             } else {
-                continue
+                setupPlaceholder(photoObject)
             }
         }
         dispatchGroup.notify(queue: DispatchQueue.main, execute: {
+            self.activityIndicator.stopAnimating()
+            self.isRemoveAllData = false
             self.newCollectionButton.isEnabled = true
+            self.collectionView.performBatchUpdates({
+                self.collectionView.reloadSections(IndexSet(integer: 0))
+            }, completion: nil)
         })
+    }
+        
+    fileprivate func setupPlaceholder(_ photoObject: Photo) {
+        if let placeholderData = UIImage(named: "placeholder")?.pngData() {
+            photoObject.image = placeholderData
+        }
     }
 }
 
@@ -108,6 +138,7 @@ extension AlbumViewController {
 extension AlbumViewController {
     
     @IBAction func newAction(_ sender: Any) {
+        isRemoveAllData = true
         newCollectionButton.isEnabled = false
         if let fetchedObject = fetchedResultsController.fetchedObjects {
             for object in fetchedObject {
@@ -189,23 +220,15 @@ extension AlbumViewController: UICollectionViewDelegateFlowLayout {
 
 extension AlbumViewController: NSFetchedResultsControllerDelegate {
     
-    func controllerDidChangeContent(_ controller: NSFetchedResultsController<NSFetchRequestResult>) {
-        collectionView.performBatchUpdates({
-            self.collectionView.reloadSections(IndexSet(integer: 0))
-        }, completion: nil)
-    }
-    
     func controller(_ controller: NSFetchedResultsController<NSFetchRequestResult>, didChange anObject: Any, at indexPath: IndexPath?, for type: NSFetchedResultsChangeType, newIndexPath: IndexPath?) {
-        guard let indexPath = indexPath, let newIndexPath = newIndexPath else { return }
-        switch type {
-        case .insert:
-            collectionView.insertItems(at: [newIndexPath])
-        case .delete:
-            collectionView.deleteItems(at: [indexPath])
-        case .update:
-            collectionView.reloadData()
-        default:
-            break
+        if let indexPath = indexPath, type == .delete, !isRemoveAllData {
+            collectionView.performBatchUpdates({
+                self.collectionView.deleteItems(at: [indexPath])
+            }, completion: { finished in
+                if finished {
+                    self.fetchPhotos()
+                }
+            })
         }
     }
 }
